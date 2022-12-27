@@ -10,11 +10,15 @@ from error_png import img as error_img
 from christmas_tree_ico import img as app_icon
 from enum import Enum
 import ctypes
+import re
 
-current_version = '1.01'
+current_version = '1.02'
+# v1.02: algorithm improved
+# v1.01: add format check
+# author: David
 
 
-class ErrorNum(Enum):
+class ErrorNum(Enum):  # not used yet
     No_error = 1
     Target_path_not_exist = "Target path not exist"
     Source_path_not_exist = "Source path not exist"
@@ -40,17 +44,14 @@ def check_path(source_path, target_path):
         # return ErrorNum.Source_file_wrong_type
 
 
-def check_format(data_list):
-    data = data_list[0][0].split(' ')
-    date = data[0].split('-')
-    if date[0] == '2022' and 0 < int(date[1]) < 13 and 0 < int(date[2]) < 25 and len(date) == 3:
-        if 0 <= int(data_list[0][1]) <= 2999:
+def check_time_format(time):
+    time_format = re.compile(r'^[1-2][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9] hour [0-2][0-9]$')
+    if isinstance(time, str):
+        if re.match(time_format, time):
             return True
         else:
-            # return ErrorNum.Source_file_wrong_format
             return False
     else:
-        # return ErrorNum.Source_file_wrong_format
         return False
 
 
@@ -60,52 +61,56 @@ def make_sum(source_file_name, target_file_path, target_file_name):
         source_csv_file = csv.reader(open(source_file_name))
         source_data_list = list(source_csv_file)
         csv_length = len(source_data_list)
-        if check_format(source_data_list):
-            target_date_list = []
-            target_uph_list = []
-            target_date_count = 0
-            target_data_list = []
-            tmp0 = ''  # last date
-            tmp_data0 = 0  # last data
-            is_data_calculated = False
+        target_date_list = []
+        target_uph_list = []
+        target_date_count = 0
+        target_data_list = []
+        temp_date_last = ''  # last date
+        temp_number_last = 0  # last data
+        is_data_calculated = False
         # form date & data list
-            for i in range(0, csv_length):
-                tmp1 = source_data_list[i][0][0:10]  # current date
-                if i == csv_length - 1:
-                    target_uph_list.append(tmp_data0)
-                if tmp0 != tmp1:  # new date found
-                    tmp0 = tmp1
-                    target_date_list.append(tmp0)  # add new date to target list
-                    target_date_count += 1
-                    if is_data_calculated:
-                        target_uph_list.append(tmp_data0)
-                    elif i != 0:
-                        target_uph_list.append(int(source_data_list[i - 1][1]))
-                    tmp_data0 = 0
-                    is_data_calculated = False
-                else:  # same date
-                    tmp_data1 = int(source_data_list[i][1])  # get current uph
-                    if tmp_data0 < tmp_data1:
-                        tmp_data0 = tmp_data1
-                    is_data_calculated = True
-            # form target list
-            for i in range(0, target_date_count):
-                temp = [target_date_list[i], target_uph_list[i]]
-                target_data_list.append(temp)
-            # create target csv
-            try:
-                with open(target_file_address, 'w', newline='') as file:
-                    newfile = csv.writer(file)
-                    for i in range(0, target_date_count):
-                        newfile.writerow(target_data_list[i])
-                return True
-            except Exception as err_result:
-                if err_result:
-                    pass
-                # return ErrorNum.Open_target_file_error
+        for i in range(0, csv_length):
+            if not check_time_format(source_data_list[i][0]):
                 return False
-        else:
-            # return check_result
+            temp_date_current = source_data_list[i][0][0:10]  # current date
+            try:
+                temp_number_current = int(source_data_list[i][1])  # get current uph
+            except ValueError:
+                return False
+            # new day found
+            if temp_date_last != temp_date_current:
+                temp_date_last = temp_date_current
+                target_date_list.append(temp_date_last)  # add new date to target list
+                target_date_count += 1
+                if i != 0:
+                    target_uph_list.append(temp_number_last)
+                temp_number_last = temp_number_current
+                is_data_compared = False
+            # same day
+            else:
+                temp_number_last = temp_number_current if temp_number_last < temp_number_current else temp_number_last
+                is_data_compared = True
+            # handle last line situation
+            if i == csv_length - 1:
+                if is_data_compared:
+                    target_uph_list.append(temp_number_last)
+                else:
+                    target_uph_list.append(temp_number_current)
+        # form target list
+        for i in range(0, target_date_count):
+            temp = [target_date_list[i], target_uph_list[i]]
+            target_data_list.append(temp)
+        # create target csv
+        try:
+            with open(target_file_address, 'w', newline='') as file:
+                newfile = csv.writer(file)
+                for i in range(0, target_date_count):
+                    newfile.writerow(target_data_list[i])
+            return True
+        except Exception as err_result:
+            if err_result:
+                pass
+            # return ErrorNum.Open_target_file_error
             return False
     else:
         # return check_result
